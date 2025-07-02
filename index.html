@@ -1,181 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>UNO Attack Scorekeeper</title>
+
+<!-- ────────── BASIC MOBILE-FIRST STYLES ────────── -->
 <style>
-/* ───────────── Global styles ───────────── */
-body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f9f9f9;color:#222}
-#uno-app{max-width:720px;padding:1rem;margin:auto;background:#fff;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+:root{
+  --red:#ff4444;
+  --blue:#2196f3;
+  --bg:#fafafa;
+  --card:#fff;
+  --text:#222;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
 
-/* Headings & buttons */
-h2,h3{margin-top:0}
-button{cursor:pointer;border:none;border-radius:6px;padding:.6rem .9rem;font-size:1rem;background:#ff4444;color:#fff}
-button[hidden]{display:none!important}
-button:disabled{opacity:.5;cursor:not-allowed}
+body{background:var(--bg);color:var(--text)}
+#app{max-width:720px;margin:1rem auto;padding:1rem;background:var(--card);border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+h2,h3{margin:0 0 .75rem}
+label{margin-right:1rem;font-weight:600}
+input{width:72px;padding:.4rem;border:1px solid #ccc;border-radius:4px;font-size:1rem}
+button{
+  cursor:pointer;border:none;border-radius:6px;
+  padding:.6rem 1rem;font-size:1rem;background:var(--red);color:#fff;
+}
+button[hidden]{display:none}
+button:disabled{opacity:.55;cursor:not-allowed}
 
-/* Inputs */
-input[type=number]{width:70px;border:1px solid #ccc;border-radius:4px;padding:.3rem;font-size:1rem}
-
-/* Responsive scoreboard */
-.table-wrap{overflow-x:auto}          /* horizontal scroll on small screens */
-table{width:100%;border-collapse:collapse;font-size:.95rem;min-width:540px}
+/* score table */
+.table-wrap{overflow-x:auto;margin-top:1rem}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:.95rem}
 th,td{border:1px solid #ddd;padding:.5rem;text-align:center;white-space:nowrap}
 th{background:#eee;font-weight:600}
 
-/* Card select dropdowns */
-select.card{margin-bottom:.4rem;padding:.3rem;font-size:1rem;width:100%}
+/* select + “add” button */
+select.card{margin-bottom:.35rem;padding:.35rem;font-size:1rem;width:100%}
+.hand button{
+  margin-left:.25rem;padding:.35rem .55rem;font-size:1.15rem;background:var(--blue);
+}
 
-/* “+” button beside selects */
-.hand button{margin-left:.2rem;padding:.3rem .5rem;font-size:1.1rem;background:#2196f3}
-
-/* Layout tweaks for narrow screens */
+/* narrow-screen tweaks */
 @media(max-width:600px){
-  h2{font-size:1.3rem}
-  button{width:100%;margin-top:.4rem}
-  #setup label{display:block;margin-bottom:.4rem}
+  h2{font-size:1.35rem}
+  label{display:block;margin-bottom:.6rem}
+  button{width:100%;margin-top:.45rem}
 }
 </style>
 </head>
 <body>
-<div id="uno-app">
+<div id="app">
   <h2>UNO Attack Scorekeeper</h2>
 
-  <!-- ▶️ Session setup -->
+  <!-- ─────── SESSION SETUP ─────── -->
   <section id="setup">
     <label>Players
-      <input type="number" id="players" min="2" max="10" value="4">
+      <input id="players" type="number" min="2" max="10" value="4">
     </label>
     <label>Rounds
-      <input type="number" id="rounds" min="1" max="25" value="10">
+      <input id="rounds" type="number" min="1" max="25" value="10">
     </label>
     <button id="start" type="button">Start Session</button>
   </section>
 
-  <!-- 🏁 Scoreboard -->
+  <!-- ─────── SCOREBOARD ─────── -->
   <section id="board" hidden>
     <h3>Round <span id="roundNow">1</span>/<span id="roundMax"></span></h3>
 
     <div class="table-wrap">
-      <table id="scoreTable">
+      <table id="table">
         <thead></thead>
         <tbody></tbody>
-        <tfoot></tfoot>
       </table>
-    </div><br>
+    </div>
 
-    <button id="saveRound" type="button">Save Round Scores</button>
-    <button id="nextRound" type="button" hidden>Next Round</button>
-    <button id="reset" type="button" style="background:#555">⟲ Clear Session</button>
-  </section>
-</div>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-
-/* ─────────── Card values per Uno Attack rules ─────────── */
-const CARD_VALUES={
- "0":0,"1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,
- "Reverse":20,"Skip":20,"Hit 2":20,
- "Discard All":30,"Trade Hands":30,
- "Wild":50,"Wild All Hit":50,"Wild Hit Fire":50,"Wild Attack-Attack":50
-};
-const CARD_NAMES=Object.keys(CARD_VALUES);
-
-/* ─────────── DOM helpers ─────────── */
-const $=id=>document.getElementById(id);
-function makeSelect(){
-  const s=document.createElement('select');s.className='card';
-  CARD_NAMES.forEach(c=>{
-    const o=document.createElement('option');o.value=c;o.textContent=c;s.append(o);
-  });
-  return s;
-}
-function handTotal(selects){
-  return[...selects].reduce((t,s)=>t+CARD_VALUES[s.value],0);
-}
-
-/* ─────────── Session state ─────────── */
-let numPlayers=0,numRounds=0,curRound=1;
-let totals=[],roundScores=[];
-
-/* ─────────── Build UI after “Start Session” ─────────── */
-$('start').onclick=()=>{
-  numPlayers=parseInt($('players').value,10);
-  numRounds=parseInt($('rounds').value,10);
-  if(numPlayers<2||numRounds<1){alert("Enter valid numbers");return;}
-
-  // header row
-  const thead=$('#scoreTable thead');thead.innerHTML='';
-  thead.innerHTML='<tr><th>Player</th><th>Cards &amp; Hand&nbsp;Total</th><th>Round</th><th>Session&nbsp;Total</th></tr>';
-
-  // body rows
-  const tbody=$('#scoreTable tbody');tbody.innerHTML='';
-  totals=Array(numPlayers).fill(0);
-  roundScores=Array(numPlayers).fill(0);
-  for(let p=0;p<numPlayers;p++){
-    const tr=document.createElement('tr');tr.dataset.idx=p;
-    tr.innerHTML=`<td>P${p+1}</td>
-      <td class="hand"></td>
-      <td class="rscore">0</td>
-      <td class="tscore">0</td>`;
-    tbody.append(tr);
-    buildHandEditor(tr.querySelector('.hand'));
-  }
-
-  $('#roundNow').textContent=1;$('#roundMax').textContent=numRounds;
-  $('#setup').hidden=true;$('#board').hidden=false;
-};
-
-/* Build per-player hand selector UI */
-function buildHandEditor(cell){
-  cell.innerHTML='';
-  cell.append(makeSelect());
-  const addBtn=document.createElement('button');
-  addBtn.textContent='+';
-  addBtn.type='button';
-  addBtn.onclick=()=>cell.insertBefore(makeSelect(),addBtn);
-  cell.append(addBtn);
-}
-
-/* Calculate & display round scores */
-$('saveRound').onclick=()=>{
-  const tbody=$('#scoreTable tbody');
-  roundScores.forEach((_,p)=>{
-    const tr=tbody.rows[p];
-    const selects=tr.querySelectorAll('select.card');
-    const hand=handTotal(selects);
-    roundScores[p]=hand;
-    totals[p]+=hand;
-    tr.querySelector('.rscore').textContent=hand;
-    tr.querySelector('.tscore').textContent=totals[p];
-  });
-  $('saveRound').hidden=true;
-  if(curRound<numRounds){$('nextRound').hidden=false;}
-};
-
-/* Prepare next round */
-$('nextRound').onclick=()=>{
-  curRound++;
-  $('#roundNow').textContent=curRound;
-  $('saveRound').hidden=false;$('nextRound').hidden=true;
-  const tbody=$('#scoreTable tbody');
-  for(let p=0;p<numPlayers;p++){
-    const tr=tbody.rows[p];
-    tr.querySelector('.rscore').textContent='0';
-    buildHandEditor(tr.querySelector('.hand'));
-  }
-};
-
-/* Full reset */
-$('reset').onclick=()=>{
-  if(!confirm('Clear the entire session?'))return;
-  $('#board').hidden=true;$('#setup').hidden=false;
-  $('#players').focus();
-};
-
-}); /* end DOMContentLoaded */
-</script>
-</body>
-</html>
+    <button id="save"  type="button">Save Round</button>
+    <button id="next"  type="button" hidden>Next Round</button>
+    <button id="clear" type="button" style="background:#555
