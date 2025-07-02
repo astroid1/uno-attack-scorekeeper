@@ -5,13 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>UNO Attack Scorekeeper</title>
 
-<!-- ────────── MOBILE-FIRST STYLES ────────── -->
+<!-- ─────────── MOBILE-FIRST STYLES ─────────── -->
 <style>
-:root{
-  --red:#ff4444; --blue:#2196f3;
-  --bg:#fafafa;  --card:#ffffff; --text:#222;
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-}
+:root{--red:#ff4444;--blue:#2196f3;--bg:#fafafa;--card:#fff;--text:#222;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text)}
 #app{max-width:720px;margin:1rem auto;padding:1rem;background:var(--card);
@@ -19,14 +16,11 @@ body{background:var(--bg);color:var(--text)}
 h2,h3{margin:0 0 .75rem}
 label{margin-right:1rem;font-weight:600}
 input{padding:.4rem;border:1px solid #ccc;border-radius:4px;font-size:1rem}
-input[type="number"]{width:72px}
-.name-list{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem}
-.name-list input{flex:1 1 140px;min-width:120px}
+input[type=number]{width:72px}
+.name-list{display:flex;flex-direction:column;gap:.6rem;margin:.8rem 0}
 
-/* buttons */
 button{cursor:pointer;border:none;border-radius:6px;padding:.6rem 1rem;font-size:1rem;background:var(--red);color:#fff}
-button[hidden]{display:none}
-button:disabled{opacity:.55;cursor:not-allowed}
+button[hidden]{display:none}button:disabled{opacity:.55;cursor:not-allowed}
 
 /* table & hand cell */
 .table-wrap{overflow-x:auto;margin-top:1rem}
@@ -51,7 +45,7 @@ select.card{padding:.35rem;font-size:1rem;width:100%}
 <div id="app">
   <h2>UNO Attack Scorekeeper</h2>
 
-  <!-- ── SESSION SETUP ── -->
+  <!-- ───── STEP 1: choose players & rounds ───── -->
   <section id="setup">
     <label>Players
       <input id="players" type="number" min="2" max="10" value="4">
@@ -59,14 +53,17 @@ select.card{padding:.35rem;font-size:1rem;width:100%}
     <label>Rounds
       <input id="rounds"  type="number" min="1" max="25" value="5">
     </label>
-
-    <!-- Dynamic name inputs appear here -->
-    <div id="names" class="name-list"></div>
-
-    <button id="start" type="button">Start Session</button>
+    <button id="toNames" type="button">Start Session</button>
   </section>
 
-  <!-- ── SCOREBOARD ── -->
+  <!-- ───── STEP 2: name entry ───── -->
+  <section id="nameScreen" hidden>
+    <h3>Enter player names</h3>
+    <div id="nameInputs" class="name-list"></div>
+    <button id="beginGame" type="button">Begin Game</button>
+  </section>
+
+  <!-- ───── SCOREBOARD ───── -->
   <section id="board" hidden>
     <h3>Round <span id="roundNow">1</span>/<span id="roundMax"></span></h3>
     <div class="table-wrap">
@@ -78,18 +75,16 @@ select.card{padding:.35rem;font-size:1rem;width:100%}
   </section>
 </div>
 
-<!-- ────────── MAIN SCRIPT ────────── -->
+<!-- ─────────── MAIN SCRIPT ─────────── -->
 <script>
-/* helper */
 const $ = s => document.querySelector(s);
 
-/* card values */
+/* card points */
 const CARD_VALUES={0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,
   Reverse:20,Skip:20,"Hit 2":20,"Discard All":30,"Trade Hands":30,
   Wild:50,"Wild All Hit":50,"Wild Hit Fire":50,"Wild Attack-Attack":50};
 const CARD_NAMES=Object.keys(CARD_VALUES);
 
-/* utilities */
 const makeSelect=()=>{const s=document.createElement('select');s.className='card';
   CARD_NAMES.forEach(c=>s.add(new Option(c,c)));return s};
 const sumHand=sel=>[...sel].reduce((t,s)=>t+CARD_VALUES[s.value],0);
@@ -97,23 +92,37 @@ const sumHand=sel=>[...sel].reduce((t,s)=>t+CARD_VALUES[s.value],0);
 /* state */
 let players=0, rounds=0, round=1, totals=[], names=[];
 
-/* ── dynamic player-name inputs ── */
-function renderNameInputs(){
-  const list=$('#names');
-  list.innerHTML='';
-  const n=+$('#players').value||0;
-  for(let i=0;i<n;i++){
+/* STEP 1 → STEP 2 */
+$('#toNames').onclick=()=>{
+  players=+$('#players').value;
+  rounds =+$('#rounds').value;
+  if(players<2||rounds<1){alert('Enter valid numbers');return;}
+
+  // build name inputs
+  const wrap=$('#nameInputs'); wrap.innerHTML='';
+  for(let i=0;i<players;i++){
     const inp=document.createElement('input');
     inp.placeholder=`Player ${i+1} name`;
     inp.className='pname';
-    list.append(inp);
+    wrap.append(inp);
   }
-}
-/* render once on load & whenever player count changes */
-renderNameInputs();
-$('#players').addEventListener('input',renderNameInputs);
 
-/* ── build scoreboard ── */
+  $('#setup').hidden=true;
+  $('#nameScreen').hidden=false;
+};
+
+/* STEP 2 → SCOREBOARD */
+$('#beginGame').onclick=()=>{
+  names=[...document.querySelectorAll('.pname')].map((i,k)=>i.value.trim()||`P${k+1}`);
+  if(names.some(n=>n==='')){alert('Please fill in every name');return;}
+
+  round=1;
+  $('#nameScreen').hidden=true;
+  $('#board').hidden=false;
+  buildBoard();
+};
+
+/* build scoreboard */
 function buildBoard(){
   const thead=$('#table thead'), tbody=$('#table tbody');
   thead.innerHTML='<tr><th>Player</th><th>Cards / Hand</th><th>Round</th><th>Total</th></tr>';
@@ -132,57 +141,35 @@ function buildBoard(){
   $('#roundMax').textContent=rounds;
 }
 
-/* hand-input UI */
+/* card-select UI */
 function addHandUI(container){
   container.innerHTML='';
   container.append(makeSelect());
   const add=document.createElement('button');
-  add.textContent='+';
-  add.type='button';
-  add.className='add';
+  add.textContent='+'; add.type='button'; add.className='add';
   add.onclick=()=>container.insertBefore(makeSelect(),add);
   container.append(add);
 }
 
-/* ── button handlers ── */
-$('#start').onclick=()=>{
-  players=+$('#players').value;
-  rounds =+$('#rounds').value;
-  names  =[...document.querySelectorAll('.pname')].map((i,k)=>i.value.trim()||`P${k+1}`);
-  if(players<2||rounds<1){alert('Enter valid numbers');return;}
-  if(names.length!==players){alert('Enter names for all players');return;}
-
-  round=1;
-  $('#setup').hidden=true;
-  $('#board').hidden=false;
-  buildBoard();
-};
-
+/* in-game buttons */
 $('#save').onclick=()=>{
   [...$('#table tbody').rows].forEach((tr,i)=>{
     const rs=sumHand(tr.querySelectorAll('select.card')); totals[i]+=rs;
-    tr.querySelector('.round').textContent=rs;
-    tr.querySelector('.total').textContent=totals[i];
+    tr.querySelector('.round').textContent=rs; tr.querySelector('.total').textContent=totals[i];
   });
-  $('#save').hidden=true;
-  $('#next').hidden = (round>=rounds);
+  $('#save').hidden=true; $('#next').hidden=(round>=rounds);
 };
-
 $('#next').onclick=()=>{
-  round++;
-  $('#roundNow').textContent=round;
+  round++; $('#roundNow').textContent=round;
   [...$('#table tbody').rows].forEach(tr=>{
     tr.querySelector('.round').textContent='0';
     addHandUI(tr.querySelector('.hand-inner'));
   });
-  $('#save').hidden=false;
-  $('#next').hidden=true;
+  $('#save').hidden=false; $('#next').hidden=true;
 };
-
 $('#clear').onclick=()=>{
   if(confirm('Reset entire session?')){
-    $('#board').hidden=true;
-    $('#setup').hidden=false;
+    $('#board').hidden=true; $('#setup').hidden=false;
   }
 };
 </script>
