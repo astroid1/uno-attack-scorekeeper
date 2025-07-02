@@ -50,7 +50,7 @@ select.card{margin-bottom:.4rem;padding:.3rem;font-size:1rem;width:100%}
     <label>Rounds
       <input type="number" id="rounds" min="1" max="25" value="10">
     </label>
-    <button id="start">Start Session</button>
+    <button id="start" type="button">Start Session</button>
   </section>
 
   <!-- 🏁 Scoreboard -->
@@ -65,13 +65,15 @@ select.card{margin-bottom:.4rem;padding:.3rem;font-size:1rem;width:100%}
       </table>
     </div><br>
 
-    <button id="saveRound">Save Round Scores</button>
-    <button id="nextRound" hidden>Next Round</button>
-    <button id="reset" style="background:#555">⟲ Clear Session</button>
+    <button id="saveRound" type="button">Save Round Scores</button>
+    <button id="nextRound" type="button" hidden>Next Round</button>
+    <button id="reset" type="button" style="background:#555">⟲ Clear Session</button>
   </section>
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', () => {
+
 /* ─────────── Card values per Uno Attack rules ─────────── */
 const CARD_VALUES={
  "0":0,"1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,
@@ -132,6 +134,7 @@ function buildHandEditor(cell){
   cell.append(makeSelect());
   const addBtn=document.createElement('button');
   addBtn.textContent='+';
+  addBtn.type='button';
   addBtn.onclick=()=>cell.insertBefore(makeSelect(),addBtn);
   cell.append(addBtn);
 }
@@ -171,6 +174,8 @@ $('reset').onclick=()=>{
   $('#board').hidden=true;$('#setup').hidden=false;
   $('#players').focus();
 };
+
+}); /* end DOMContentLoaded */
 </script>
 </body>
 </html>
