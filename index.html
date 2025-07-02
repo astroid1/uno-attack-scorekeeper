@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>UNO Attack Scorekeeper</title>
 
-<!-- ─────────── MOBILE-FIRST STYLES ─────────── -->
 <style>
 :root{--red:#ff4444;--blue:#2196f3;--bg:#fafafa;--card:#fff;--text:#222;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
@@ -20,9 +19,9 @@ input[type=number]{width:72px}
 .name-list{display:flex;flex-direction:column;gap:.6rem;margin:.8rem 0}
 
 button{cursor:pointer;border:none;border-radius:6px;padding:.6rem 1rem;font-size:1rem;background:var(--red);color:#fff}
-button[hidden]{display:none}button:disabled{opacity:.55;cursor:not-allowed}
+button[hidden]{display:none}
+button:disabled{opacity:.55;cursor:not-allowed}
 
-/* table & hand cell */
 .table-wrap{overflow-x:auto;margin-top:1rem}
 table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:.95rem}
 th,td{border:1px solid #ddd;padding:.5rem;text-align:center;white-space:nowrap}
@@ -32,7 +31,8 @@ td.hand{white-space:normal}
 select.card{padding:.35rem;font-size:1rem;width:100%}
 .hand button.add{align-self:flex-start;padding:.35rem .55rem;font-size:1.1rem;background:var(--blue)}
 
-/* narrow screens */
+#winner{margin-top:1rem;font-weight:700}
+
 @media(max-width:600px){
   h2{font-size:1.35rem}
   label{display:block;margin-bottom:.6rem}
@@ -45,60 +45,62 @@ select.card{padding:.35rem;font-size:1rem;width:100%}
 <div id="app">
   <h2>UNO Attack Scorekeeper</h2>
 
-  <!-- ───── STEP 1: choose players & rounds ───── -->
+  <!-- STEP 1: basic game setup -->
   <section id="setup">
     <label>Players
-      <input id="players" type="number" min="2" max="10" value="4">
+      <input id="players" type="number" min="2" max="10" value="2">
     </label>
     <label>Rounds
       <input id="rounds"  type="number" min="1" max="25" value="5">
     </label>
-    <button id="toNames" type="button">Start Session</button>
+    <button id="toNames" type="button">Start Game</button>
   </section>
 
-  <!-- ───── STEP 2: name entry ───── -->
+  <!-- STEP 2: player names -->
   <section id="nameScreen" hidden>
     <h3>Enter player names</h3>
     <div id="nameInputs" class="name-list"></div>
     <button id="beginGame" type="button">Begin Game</button>
   </section>
 
-  <!-- ───── SCOREBOARD ───── -->
+  <!-- SCOREBOARD -->
   <section id="board" hidden>
     <h3>Round <span id="roundNow">1</span>/<span id="roundMax"></span></h3>
     <div class="table-wrap">
       <table id="table"><thead></thead><tbody></tbody></table>
     </div>
+
     <button id="save"  type="button">Save Round</button>
     <button id="next"  type="button" hidden>Next Round</button>
-    <button id="clear" type="button" style="background:#555">⟲ Reset Session</button>
+    <button id="clear" type="button" style="background:#555">⟲ Reset Game</button>
+
+    <p id="winner" hidden></p>
   </section>
 </div>
 
-<!-- ─────────── MAIN SCRIPT ─────────── -->
 <script>
 const $ = s => document.querySelector(s);
 
-/* card points */
+/* card values */
 const CARD_VALUES={0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,
   Reverse:20,Skip:20,"Hit 2":20,"Discard All":30,"Trade Hands":30,
   Wild:50,"Wild All Hit":50,"Wild Hit Fire":50,"Wild Attack-Attack":50};
 const CARD_NAMES=Object.keys(CARD_VALUES);
 
-const makeSelect=()=>{const s=document.createElement('select');s.className='card';
-  CARD_NAMES.forEach(c=>s.add(new Option(c,c)));return s};
-const sumHand=sel=>[...sel].reduce((t,s)=>t+CARD_VALUES[s.value],0);
+const makeSelect = () => {
+  const s=document.createElement('select'); s.className='card';
+  CARD_NAMES.forEach(c=>s.add(new Option(c,c))); return s;
+};
+const sumHand = sel => [...sel].reduce((t,s)=>t+CARD_VALUES[s.value],0);
 
 /* state */
 let players=0, rounds=0, round=1, totals=[], names=[];
 
-/* STEP 1 → STEP 2 */
+/* ----- step 1 -> step 2 ----- */
 $('#toNames').onclick=()=>{
-  players=+$('#players').value;
-  rounds =+$('#rounds').value;
+  players=+$('#players').value; rounds=+$('#rounds').value;
   if(players<2||rounds<1){alert('Enter valid numbers');return;}
 
-  // build name inputs
   const wrap=$('#nameInputs'); wrap.innerHTML='';
   for(let i=0;i<players;i++){
     const inp=document.createElement('input');
@@ -106,28 +108,27 @@ $('#toNames').onclick=()=>{
     inp.className='pname';
     wrap.append(inp);
   }
-
   $('#setup').hidden=true;
   $('#nameScreen').hidden=false;
 };
 
-/* STEP 2 → SCOREBOARD */
+/* ----- step 2 -> scoreboard ----- */
 $('#beginGame').onclick=()=>{
   names=[...document.querySelectorAll('.pname')].map((i,k)=>i.value.trim()||`P${k+1}`);
   if(names.some(n=>n==='')){alert('Please fill in every name');return;}
 
-  round=1;
+  round=1; totals=Array(players).fill(0);
   $('#nameScreen').hidden=true;
   $('#board').hidden=false;
+  $('#winner').hidden=true;
   buildBoard();
 };
 
-/* build scoreboard */
+/* build rows */
 function buildBoard(){
   const thead=$('#table thead'), tbody=$('#table tbody');
   thead.innerHTML='<tr><th>Player</th><th>Cards / Hand</th><th>Round</th><th>Total</th></tr>';
-  tbody.innerHTML=''; totals=Array(players).fill(0);
-
+  tbody.innerHTML='';
   for(let i=0;i<players;i++){
     const tr=document.createElement('tr');
     tr.innerHTML=`<td>${names[i]}</td>
@@ -141,7 +142,7 @@ function buildBoard(){
   $('#roundMax').textContent=rounds;
 }
 
-/* card-select UI */
+/* vertical card selectors */
 function addHandUI(container){
   container.innerHTML='';
   container.append(makeSelect());
@@ -151,24 +152,46 @@ function addHandUI(container){
   container.append(add);
 }
 
-/* in-game buttons */
+/* ----- in-game buttons ----- */
 $('#save').onclick=()=>{
   [...$('#table tbody').rows].forEach((tr,i)=>{
     const rs=sumHand(tr.querySelectorAll('select.card')); totals[i]+=rs;
-    tr.querySelector('.round').textContent=rs; tr.querySelector('.total').textContent=totals[i];
+    tr.querySelector('.round').textContent=rs;
+    tr.querySelector('.total').textContent=totals[i];
   });
-  $('#save').hidden=true; $('#next').hidden=(round>=rounds);
+
+  $('#save').hidden=true;
+
+  if(round>=rounds){
+    $('#next').hidden=true;
+    declareWinner();
+  }else{
+    $('#next').hidden=false;
+  }
 };
+
 $('#next').onclick=()=>{
-  round++; $('#roundNow').textContent=round;
+  round++;
+  $('#roundNow').textContent=round;
   [...$('#table tbody').rows].forEach(tr=>{
     tr.querySelector('.round').textContent='0';
     addHandUI(tr.querySelector('.hand-inner'));
   });
   $('#save').hidden=false; $('#next').hidden=true;
 };
+
+/* winner display */
+function declareWinner(){
+  const min=Math.min(...totals);
+  const winners=names.filter((_,i)=>totals[i]===min);
+  $('#winner').textContent = winners.length>1
+    ? `It’s a tie! Winners: ${winners.join(', ')} with ${min} points`
+    : `Winner: ${winners[0]} with ${min} points`;
+  $('#winner').hidden=false;
+}
+
 $('#clear').onclick=()=>{
-  if(confirm('Reset entire session?')){
+  if(confirm('Reset the entire game?')){
     $('#board').hidden=true; $('#setup').hidden=false;
   }
 };
