@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UNO Attack Scorekeeper</title>
+
+<!-- ─────── MOBILE-FIRST STYLES ─────── -->
+<style>
+:root{
+  --red:#ff4444;
+  --blue:#2196f3;
+  --bg:#fafafa;
+  --card:#ffffff;
+  --text:#222222;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text)}
+#app{max-width:720px;margin:1rem auto;padding:1rem;background:var(--card);
+     border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+h2,h3{margin:0 0 .75rem}
+label{margin-right:1rem;font-weight:600}
+input{width:72px;padding:.4rem;border:1px solid #ccc;border-radius:4px;font-size:1rem}
+button{
+  cursor:pointer;border:none;border-radius:6px;padding:.6rem 1rem;font-size:1rem;
+  background:var(--red);color:#fff
+}
+button[hidden]{display:none}
+button:disabled{opacity:.55;cursor:not-allowed}
+.table-wrap{overflow-x:auto;margin-top:1rem}
+table{border-collapse:collapse;width:100%;min-width:560px;font-size:.95rem}
+th,td{border:1px solid #ddd;padding:.5rem;text-align:center;white-space:nowrap}
+th{background:#eee;font-weight:600}
+select.card{margin-bottom:.35rem;padding:.35rem;font-size:1rem;width:100%}
+.hand button{margin-left:.25rem;padding:.35rem .55rem;font-size:1.15rem;background:var(--blue)}
+@media (max-width:600px){
+  h2{font-size:1.35rem}
+  label{display:block;margin-bottom:.6rem}
+  button{width:100%;margin-top:.45rem}
+}
+</style>
+</head>
+
+<body>
+<div id="app">
+  <h2>UNO Attack Scorekeeper</h2>
+
+  <!-- ───── SESSION SETUP ───── -->
+  <section id="setup">
+    <label>Players
+      <input id="players" type="number" min="2" max="10" value="4">
+    </label>
+    <label>Rounds
+      <input id="rounds" type="number" min="1" max="25" value="10">
+    </label>
+    <button id="start" type="button">Start Session</button>
+  </section>
+
+  <!-- ───── SCOREBOARD ───── -->
+  <section id="board" hidden>
+    <h3>Round <span id="roundNow">1</span>/<span id="roundMax"></span></h3>
+
+    <div class="table-wrap">
+      <table id="table">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <button id="save"  type="button">Save Round</button>
+    <button id="next"  type="button" hidden>Next Round</button>
+    <button id="clear" type="button" style="background:#555">⟲ Reset Session</button>
+  </section>
+</div>
+
+<!-- ───── MAIN SCRIPT (placed last so DOM exists) ───── -->
+<script>
+/* 1. Card values per UNO Attack rules */
+const CARD_VALUES={
+  0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,
+  Reverse:20,Skip:20,"Hit 2":20,"Discard All":30,"Trade Hands":30,
+  Wild:50,"Wild All Hit":50,"Wild Hit Fire":50,"Wild Attack-Attack":50
+};
+const CARD_NAMES=Object.keys(CARD_VALUES);
+
+/* 2. DOM helpers & utilities */
+const $=id=>document.getElementById(id);
+const makeSelect=()=>{const s=document.createElement('select');s.className='card';
+  CARD_NAMES.forEach(c=>s.add(new Option(c,c)));return s};
+const sumHand=sel=>[...sel].reduce((t,s)=>t+CARD_VALUES[s.value],0);
+
+/* 3. State */
+let players=0,rounds=0,round=1,totals=[];
+
+/* 4. Build scoreboard */
+function buildBoard(){
+  const thead=$('#table thead'),tbody=$('#table tbody');
+  thead.innerHTML='<tr><th>Player</th><th>Cards / Hand</th><th>Round</th><th>Total</th></tr>';
+  tbody.innerHTML=''; totals=Array(players).fill(0);
+
+  for(let i=0;i<players;i++){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>P${i+1}</td>
+                  <td class="hand"></td>
+                  <td class="round">0</td>
+                  <td class="total">0</td>`;
+    tbody.append(tr);
+    addHandUI(tr.querySelector('.hand'));
+  }
+  $('#roundNow').textContent=round;
+  $('#roundMax').textContent=rounds;
+}
+
+/* 5. Hand input builder */
+function addHandUI(cell){
+  cell.innerHTML='';
+  cell.append(makeSelect());
+  const plus=document.createElement('button'); plus.textContent='+'; plus.type='button';
+  plus.onclick=()=>cell.insertBefore(makeSelect(),plus);
+  cell.append(plus);
+}
+
+/* 6. Button handlers */
+$('#start').onclick=()=>{
+  players=+$('#players').value;
+  rounds =+$('#rounds').value;
+  if(players<2||rounds<1){alert('Enter valid numbers');return;}
+
+  round=1;
+  $('#setup').hidden=true;
+  $('#board').hidden=false;
+  buildBoard();
+};
+
+$('#save').onclick=()=>{
+  [...$('#table tbody').rows].forEach((tr,i)=>{
+    const rs=sumHand(tr.querySelectorAll('select.card'));
+    totals[i]+=rs;
+    tr.querySelector('.round').textContent=rs;
+    tr.querySelector('.total').textContent=totals[i];
+  });
+  $('#save').hidden=true;
+  $('#next').hidden = (round >= rounds);
+};
+
+$('#next').onclick=()=>{
+  round++;
+  $('#roundNow').textContent=round;
+  [...$('#table tbody').rows].forEach(tr=>{
+    tr.querySelector('.round').textContent='0';
+    addHandUI(tr.querySelector('.hand'));
+  });
+  $('#save').hidden=false;
+  $('#next').hidden=true;
+};
+
+$('#clear').onclick=()=>{
+  if(confirm('Reset entire session?')){
+    $('#board').hidden=true;
+    $('#setup').hidden=false;
+  }
+};
+</script>
+</body>
+</html>
