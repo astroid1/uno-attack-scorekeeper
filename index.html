@@ -18,17 +18,21 @@ body{background:var(--bg);color:var(--text)}
      border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
 h2,h3{margin:0 0 .75rem}
 label{margin-right:1rem;font-weight:600}
-input{width:72px;padding:.4rem;border:1px solid #ccc;border-radius:4px;font-size:1rem}
-button{cursor:pointer;border:none;border-radius:6px;padding:.6rem 1rem;font-size:1rem;background:var(--red);color:#fff}
-button[hidden]{display:none}button:disabled{opacity:.55;cursor:not-allowed}
+input{padding:.4rem;border:1px solid #ccc;border-radius:4px;font-size:1rem}
+input[type="number"]{width:72px}
+.name-list{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem}
+.name-list input{flex:1 1 140px;min-width:120px}
 
-/* table */
+/* buttons */
+button{cursor:pointer;border:none;border-radius:6px;padding:.6rem 1rem;font-size:1rem;background:var(--red);color:#fff}
+button[hidden]{display:none}
+button:disabled{opacity:.55;cursor:not-allowed}
+
+/* table & hand cell */
 .table-wrap{overflow-x:auto;margin-top:1rem}
-table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:.95rem;min-width:0}
+table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:.95rem}
 th,td{border:1px solid #ddd;padding:.5rem;text-align:center;white-space:nowrap}
 th{background:#eee;font-weight:600}
-
-/* hand cell now flex-column */
 td.hand{white-space:normal}
 .hand-inner{display:flex;flex-direction:column;gap:.35rem}
 select.card{padding:.35rem;font-size:1rem;width:100%}
@@ -49,22 +53,25 @@ select.card{padding:.35rem;font-size:1rem;width:100%}
 
   <!-- ── SESSION SETUP ── -->
   <section id="setup">
-    <label>Players <input id="players" type="number" min="2" max="10" value="4"></label>
-    <label>Rounds  <input id="rounds"  type="number" min="1" max="25" value="10"></label>
+    <label>Players
+      <input id="players" type="number" min="2" max="10" value="4">
+    </label>
+    <label>Rounds
+      <input id="rounds"  type="number" min="1" max="25" value="5">
+    </label>
+
+    <!-- Dynamic name inputs appear here -->
+    <div id="names" class="name-list"></div>
+
     <button id="start" type="button">Start Session</button>
   </section>
 
   <!-- ── SCOREBOARD ── -->
   <section id="board" hidden>
     <h3>Round <span id="roundNow">1</span>/<span id="roundMax"></span></h3>
-
     <div class="table-wrap">
-      <table id="table">
-        <thead></thead>
-        <tbody></tbody>
-      </table>
+      <table id="table"><thead></thead><tbody></tbody></table>
     </div>
-
     <button id="save"  type="button">Save Round</button>
     <button id="next"  type="button" hidden>Next Round</button>
     <button id="clear" type="button" style="background:#555">⟲ Reset Session</button>
@@ -73,7 +80,7 @@ select.card{padding:.35rem;font-size:1rem;width:100%}
 
 <!-- ────────── MAIN SCRIPT ────────── -->
 <script>
-/* helper accepts CSS selectors like '#id' */
+/* helper */
 const $ = s => document.querySelector(s);
 
 /* card values */
@@ -88,9 +95,25 @@ const makeSelect=()=>{const s=document.createElement('select');s.className='card
 const sumHand=sel=>[...sel].reduce((t,s)=>t+CARD_VALUES[s.value],0);
 
 /* state */
-let players=0, rounds=0, round=1, totals=[];
+let players=0, rounds=0, round=1, totals=[], names=[];
 
-/* build scoreboard */
+/* ── dynamic player-name inputs ── */
+function renderNameInputs(){
+  const list=$('#names');
+  list.innerHTML='';
+  const n=+$('#players').value||0;
+  for(let i=0;i<n;i++){
+    const inp=document.createElement('input');
+    inp.placeholder=`Player ${i+1} name`;
+    inp.className='pname';
+    list.append(inp);
+  }
+}
+/* render once on load & whenever player count changes */
+renderNameInputs();
+$('#players').addEventListener('input',renderNameInputs);
+
+/* ── build scoreboard ── */
 function buildBoard(){
   const thead=$('#table thead'), tbody=$('#table tbody');
   thead.innerHTML='<tr><th>Player</th><th>Cards / Hand</th><th>Round</th><th>Total</th></tr>';
@@ -98,10 +121,10 @@ function buildBoard(){
 
   for(let i=0;i<players;i++){
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>P${i+1}</td>
-                  <td class="hand"><div class="hand-inner"></div></td>
-                  <td class="round">0</td>
-                  <td class="total">0</td>`;
+    tr.innerHTML=`<td>${names[i]}</td>
+      <td class="hand"><div class="hand-inner"></div></td>
+      <td class="round">0</td>
+      <td class="total">0</td>`;
     tbody.append(tr);
     addHandUI(tr.querySelector('.hand-inner'));
   }
@@ -109,11 +132,10 @@ function buildBoard(){
   $('#roundMax').textContent=rounds;
 }
 
-/* hand input builder (vertical stacking) */
+/* hand-input UI */
 function addHandUI(container){
   container.innerHTML='';
   container.append(makeSelect());
-
   const add=document.createElement('button');
   add.textContent='+';
   add.type='button';
@@ -122,32 +144,46 @@ function addHandUI(container){
   container.append(add);
 }
 
-/* handlers */
+/* ── button handlers ── */
 $('#start').onclick=()=>{
-  players=+$('#players').value; rounds=+$('#rounds').value;
+  players=+$('#players').value;
+  rounds =+$('#rounds').value;
+  names  =[...document.querySelectorAll('.pname')].map((i,k)=>i.value.trim()||`P${k+1}`);
   if(players<2||rounds<1){alert('Enter valid numbers');return;}
-  round=1; $('#setup').hidden=true; $('#board').hidden=false; buildBoard();
+  if(names.length!==players){alert('Enter names for all players');return;}
+
+  round=1;
+  $('#setup').hidden=true;
+  $('#board').hidden=false;
+  buildBoard();
 };
 
 $('#save').onclick=()=>{
   [...$('#table tbody').rows].forEach((tr,i)=>{
     const rs=sumHand(tr.querySelectorAll('select.card')); totals[i]+=rs;
-    tr.querySelector('.round').textContent=rs; tr.querySelector('.total').textContent=totals[i];
+    tr.querySelector('.round').textContent=rs;
+    tr.querySelector('.total').textContent=totals[i];
   });
-  $('#save').hidden=true; $('#next').hidden=(round>=rounds);
+  $('#save').hidden=true;
+  $('#next').hidden = (round>=rounds);
 };
 
 $('#next').onclick=()=>{
-  round++; $('#roundNow').textContent=round;
+  round++;
+  $('#roundNow').textContent=round;
   [...$('#table tbody').rows].forEach(tr=>{
     tr.querySelector('.round').textContent='0';
     addHandUI(tr.querySelector('.hand-inner'));
   });
-  $('#save').hidden=false; $('#next').hidden=true;
+  $('#save').hidden=false;
+  $('#next').hidden=true;
 };
 
 $('#clear').onclick=()=>{
-  if(confirm('Reset entire session?')){$('#board').hidden=true; $('#setup').hidden=false;}
+  if(confirm('Reset entire session?')){
+    $('#board').hidden=true;
+    $('#setup').hidden=false;
+  }
 };
 </script>
 </body>
