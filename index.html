@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>UNO Attack Scorekeeper</title>
+
 <style>
 :root{--red:#ff4444;--blue:#2196f3;--bg:#fafafa;--card:#fff;--text:#222;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
@@ -17,7 +18,8 @@ input{padding:.4rem;border:1px solid #ccc;border-radius:4px;font-size:1rem}
 input[type=number]{width:72px}
 .name-list{display:flex;flex-direction:column;gap:.6rem;margin:.8rem 0}
 button{cursor:pointer;border:none;border-radius:6px;padding:.6rem 1rem;font-size:1rem;background:var(--red);color:#fff}
-button[hidden]{display:none}button:disabled{opacity:.55;cursor:not-allowed}
+button[hidden]{display:none}
+button:disabled{opacity:.55;cursor:not-allowed}
 .table-wrap{overflow-x:auto;margin-top:1rem}
 table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:.95rem}
 th,td{border:1px solid #ddd;padding:.5rem;text-align:center;white-space:nowrap}
@@ -41,23 +43,24 @@ select.card{padding:.35rem;font-size:1rem;width:100%}
 <div id="app">
   <h2>UNO Attack Scorekeeper</h2>
 
-  <!-- STEP 1 -->
+  <!-- STEP 1: game size -->
   <section id="setup">
     <label>Players <input id="players" type="number" min="2" max="10" value="2"></label>
     <label>Rounds  <input id="rounds"  type="number" min="1" max="25" value="5"></label>
     <button id="toNames" type="button">Start Game</button>
   </section>
 
-  <!-- STEP 2 -->
+  <!-- STEP 2: names -->
   <section id="nameScreen" hidden>
     <h3>Enter player names</h3>
     <div id="nameInputs" class="name-list"></div>
     <button id="beginGame" type="button">Begin Game</button>
   </section>
 
-  <!-- GAME -->
+  <!-- GAME PLAY -->
   <section id="board" hidden>
     <h3>Round <span id="roundNow">1</span>/<span id="roundMax"></span></h3>
+
     <div class="table-wrap">
       <table id="table"><thead></thead><tbody></tbody></table>
     </div>
@@ -79,131 +82,148 @@ select.card{padding:.35rem;font-size:1rem;width:100%}
 </div>
 
 <script>
-const $ = s => document.querySelector(s);
+/* ---------- helpers ---------- */
+const qs  = sel => document.querySelector(sel);
+const qsa = sel => [...document.querySelectorAll(sel)];
 
 /* ---------- card values ---------- */
-const CARD_VALUES={0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,
+const CARD_VALUES = {
+  0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,
   Reverse:20,Skip:20,"Hit 2":20,"Discard All":30,"Trade Hands":30,
-  Wild:50,"Wild All Hit":50,"Wild Hit Fire":50,"Wild Attack-Attack":50};
-const CARD_NAMES=Object.keys(CARD_VALUES);
-const makeSelect=()=>{const s=document.createElement('select');s.className='card';
-  CARD_NAMES.forEach(c=>s.add(new Option(c,c)));return s};
-const sumHand=sel=>[...sel].reduce((t,s)=>t+CARD_VALUES[s.value],0);
+  Wild:50,"Wild All Hit":50,"Wild Hit Fire":50,"Wild Attack-Attack":50
+};
+const CARD_NAMES = Object.keys(CARD_VALUES);
+const makeSelect = () => {
+  const s=document.createElement('select'); s.className='card';
+  CARD_NAMES.forEach(c=>s.add(new Option(c,c))); return s;
+};
+const sumHand = sel => [...sel].reduce((t,s)=>t+CARD_VALUES[s.value],0);
 
 /* ---------- state ---------- */
-let players=0, rounds=0, round=1;
+let players=0, rounds=0;
 let names=[], totals=[], roundScores=[];
 
-/* ---------- step 1 → 2 ---------- */
-$('#toNames').onclick=()=>{
-  players=+$('#players').value; rounds=+$('#rounds').value;
+/* STEP 1 → STEP 2 */
+qs('#toNames').onclick = () => {
+  players = +qs('#players').value;
+  rounds  = +qs('#rounds').value;
   if(players<2||rounds<1){alert('Enter valid numbers');return;}
-  const wrap=$('#nameInputs'); wrap.innerHTML='';
+
+  const wrap=qs('#nameInputs'); wrap.innerHTML='';
   for(let i=0;i<players;i++){
-    const inp=document.createElement('input');
-    inp.placeholder=`Player ${i+1} name`; inp.className='pname'; wrap.append(inp);
+    wrap.insertAdjacentHTML('beforeend',`<input placeholder="Player ${i+1} name" class="pname">`);
   }
-  $('#setup').hidden=true; $('#nameScreen').hidden=false;
+  qs('#setup').hidden=true; qs('#nameScreen').hidden=false;
 };
 
-/* ---------- step 2 → game ---------- */
-$('#beginGame').onclick=()=>{
-  names=[...document.querySelectorAll('.pname')].map((i,k)=>i.value.trim()||`P${k+1}`);
-  if(names.some(n=>n==='')){alert('Please fill in every name');return;}
+/* STEP 2 → GAME */
+qs('#beginGame').onclick = () => {
+  names=qsa('.pname').map((i,k)=>i.value.trim()||`P${k+1}`);
+  if(names.some(n=>n==='')){alert('Fill every name');return;}
 
-  round=1; totals=Array(players).fill(0); roundScores=[];
-  $('#nameScreen').hidden=true; $('#board').hidden=false;
-  $('#winner').hidden=true; $('#history').hidden=true;
-  buildBoard(); buildHistHeader(); updateTotalsFooter();
+  totals = Array(players).fill(0);
+  roundScores = [];                             // reset history
+  qs('#nameScreen').hidden=true; qs('#board').hidden=false;
+  qs('#winner').hidden=true; qs('#history').hidden=true;
+  qs('#back').hidden=true; qs('#save').hidden=false;
+  buildBoard(); buildHistHeader(); updateTotalsFooter(); updateRoundLabel();
 };
 
-/* build entry table */
+/* build entry table for current round */
 function buildBoard(){
-  const thead=$('#table thead'), tbody=$('#table tbody');
-  thead.innerHTML='<tr><th>Player</th><th>Cards / Hand</th></tr>';
-  tbody.innerHTML='';
+  qs('#table thead').innerHTML='<tr><th>Player</th><th>Cards / Hand</th></tr>';
+  const tbody=qs('#table tbody'); tbody.innerHTML='';
   names.forEach(n=>{
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${n}</td><td class="hand"><div class="hand-inner"></div></td>`;
-    tbody.append(tr);
-    addHandUI(tr.querySelector('.hand-inner'));
+    tbody.insertAdjacentHTML('beforeend',
+      `<tr><td>${n}</td><td class="hand"><div class="hand-inner"></div></td></tr>`);
   });
-  $('#roundNow').textContent=round; $('#roundMax').textContent=rounds;
+  qsa('.hand-inner').forEach(addHandUI);
 }
 
-/* card inputs vertical */
+/* add vertical card selectors */
 function addHandUI(container){
   container.innerHTML=''; container.append(makeSelect());
-  const add=document.createElement('button');add.textContent='+';add.type='button';add.className='add';
-  add.onclick=()=>container.insertBefore(makeSelect(),add); container.append(add);
+  const add=document.createElement('button');
+  add.textContent='+'; add.type='button'; add.className='add';
+  add.onclick = () => container.insertBefore(makeSelect(),add);
+  container.append(add);
 }
 
-/* box-score header */
+/* ---------- BOX SCORE ---------- */
 function buildHistHeader(){
-  $('#histTable thead').innerHTML='<tr><th>Round</th>'+names.map(n=>`<th>${n}</th>`).join('')+'</tr>';
-  $('#histTable tbody').innerHTML=''; $('#histTable tfoot').innerHTML='';
+  qs('#histTable thead').innerHTML =
+    '<tr><th>Round</th>'+names.map(n=>`<th>${n}</th>`).join('')+'</tr>';
+  qs('#histTable tbody').innerHTML='';
+  qs('#histTable tfoot').innerHTML='';
 }
-
-/* totals footer */
+function addHistRow(num,scores){
+  qs('#histTable tbody').insertAdjacentHTML('beforeend',
+    `<tr><td>${num}</td>${scores.map(x=>`<td>${x}</td>`).join('')}</tr>`);
+}
 function updateTotalsFooter(){
-  $('#histTable tfoot').innerHTML='<tr><th>Total</th>'+totals.map(t=>`<th>${t}</th>`).join('')+'</tr>';
+  qs('#histTable tfoot').innerHTML =
+    '<tr><th>Total</th>'+totals.map(t=>`<th>${t}</th>`).join('')+'</tr>';
+}
+function updateRoundLabel(){
+  qs('#roundNow').textContent = roundScores.length + 1;
+  qs('#roundMax').textContent = rounds;
 }
 
-/* add row to history */
-function addHistRow(r,scores){
-  const tr=document.createElement('tr');
-  tr.innerHTML='<td>'+r+'</td>'+scores.map(v=>`<td>${v}</td>`).join('');
-  $('#histTable tbody').append(tr);
-}
-
-/* ---------- save / auto‐advance ---------- */
-$('#save').onclick=()=>{
-  const thisRound=[];
-  [...$('#table tbody').rows].forEach((tr,i)=>{
-    const score=sumHand(tr.querySelectorAll('select.card'));
-    totals[i]+=score; thisRound.push(score);
+/* ---------- SAVE ROUND ---------- */
+qs('#save').onclick = () => {
+  const roundNum = roundScores.length + 1;
+  const thisRound = qsa('#table tbody .hand').map((td,i)=>{
+    const score = sumHand(td.querySelectorAll('select.card'));
+    totals[i] += score; return score;
   });
+
   roundScores.push(thisRound);
-  addHistRow(round,thisRound); updateTotalsFooter();
-  $('#history').hidden=false; $('#back').hidden=false;
+  addHistRow(roundNum,thisRound);
+  updateTotalsFooter();
+  qs('#history').hidden=false; qs('#back').hidden=false;
 
-  if(round>=rounds){declareWinner(); $('#save').hidden=true;}
-  else{round++; $('#roundNow').textContent=round; resetForNext();}
+  if(roundNum >= rounds){
+    declareWinner();
+    qs('#save').hidden=true;
+  }else{
+    buildBoard();             // new blank selectors for next round
+    updateRoundLabel();
+  }
 };
 
-/* prepare next round UI */
-function resetForNext(){
-  [...$('#table tbody').rows].forEach(tr=>{
-    addHandUI(tr.querySelector('.hand-inner'));
-  });
-}
+/* ---------- BACK ONE ROUND ---------- */
+qs('#back').onclick = () => {
+  if(!roundScores.length) return;
+  const last = roundScores.pop();
+  totals = totals.map((t,i)=>t-last[i]);
 
-/* ---------- back a round ---------- */
-$('#back').onclick=()=>{
-  if(!roundScores.length)return;
-  const last=roundScores.pop();
-  totals=totals.map((t,i)=>t-last[i]);
-  round--; $('#roundNow').textContent=round;
-  $('#histTable tbody').lastElementChild.remove();
-  if(!roundScores.length){$('#history').hidden=true; $('#back').hidden=true;}
-  $('#winner').hidden=true; $('#save').hidden=false;
-  updateTotalsFooter(); resetForNext();
+  // remove history row & update
+  qs('#histTable tbody').lastElementChild.remove();
+  updateTotalsFooter();
+  qs('#history').hidden = !roundScores.length;
+  qs('#back').hidden    = !roundScores.length;
+  qs('#winner').hidden  = true;
+  qs('#save').hidden    = false;
+
+  buildBoard();
+  updateRoundLabel();
 };
 
-/* winner */
+/* ---------- WINNER ---------- */
 function declareWinner(){
-  const min=Math.min(...totals);
-  const winners=names.filter((_,i)=>totals[i]===min);
-  $('#winner').textContent=winners.length>1
-    ? `It’s a tie! Winners: ${winners.join(', ')} with ${min} points`
-    : `Winner: ${winners[0]} with ${min} points`;
-  $('#winner').hidden=false;
+  const min = Math.min(...totals);
+  const winners = names.filter((_,i)=>totals[i]===min);
+  qs('#winner').textContent =
+    winners.length>1
+      ? `Tie! ${winners.join(', ')} win with ${min} points`
+      : `Winner: ${winners[0]} with ${min} points`;
+  qs('#winner').hidden = false;
 }
 
-/* reset game */
-$('#clear').onclick=()=>{
+/* ---------- RESET GAME ---------- */
+qs('#clear').onclick = () =>{
   if(confirm('Reset the entire game?')){
-    $('#board').hidden=true; $('#setup').hidden=false;
+    qs('#board').hidden=true; qs('#setup').hidden=false;
   }
 };
 </script>
