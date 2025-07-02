@@ -4,9 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>UNO Attack Scorekeeper</title>
-
 <style>
-:root{--red:#ff4444;--blue:#2196f3;--bg:#fafafa;--card:#fff;--text:#222;
+:root{--red:#ff4444;--blue:#2196f3;--gray:#555;--bg:#fafafa;--card:#fff;--text:#222;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text)}
@@ -18,8 +17,9 @@ input{padding:.4rem;border:1px solid #ccc;border-radius:4px;font-size:1rem}
 input[type=number]{width:72px}
 .name-list{display:flex;flex-direction:column;gap:.6rem;margin:.8rem 0}
 button{cursor:pointer;border:none;border-radius:6px;padding:.6rem 1rem;font-size:1rem;background:var(--red);color:#fff}
-button[hidden]{display:none}
-button:disabled{opacity:.55;cursor:not-allowed}
+button.alt{background:var(--blue)}
+button.gray{background:var(--gray)}
+button[hidden]{display:none}button:disabled{opacity:.55;cursor:not-allowed}
 .table-wrap{overflow-x:auto;margin-top:1rem}
 table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:.95rem}
 th,td{border:1px solid #ddd;padding:.5rem;text-align:center;white-space:nowrap}
@@ -29,7 +29,6 @@ td.hand{white-space:normal}
 select.card{padding:.35rem;font-size:1rem;width:100%}
 .hand button.add{align-self:flex-start;padding:.35rem .55rem;font-size:1.1rem;background:var(--blue)}
 #history h3{margin-top:1.5rem}
-#history table{margin-top:.5rem}
 #winner{margin-top:1rem;font-weight:700}
 @media(max-width:600px){
   h2{font-size:1.35rem}
@@ -43,189 +42,140 @@ select.card{padding:.35rem;font-size:1rem;width:100%}
 <div id="app">
   <h2>UNO Attack Scorekeeper</h2>
 
-  <!-- STEP 1: game size -->
+  <!-- STEP 1 -->
   <section id="setup">
     <label>Players <input id="players" type="number" min="2" max="10" value="2"></label>
     <label>Rounds  <input id="rounds"  type="number" min="1" max="25" value="5"></label>
-    <button id="toNames" type="button">Start Game</button>
+    <button id="toNames">Start Game</button>
   </section>
 
-  <!-- STEP 2: names -->
+  <!-- STEP 2 -->
   <section id="nameScreen" hidden>
     <h3>Enter player names</h3>
     <div id="nameInputs" class="name-list"></div>
-    <button id="beginGame" type="button">Begin Game</button>
+    <button id="beginGame">Begin Game</button>
   </section>
 
-  <!-- GAME PLAY -->
+  <!-- GAME -->
   <section id="board" hidden>
     <h3>Round <span id="roundNow">1</span>/<span id="roundMax"></span></h3>
 
-    <div class="table-wrap">
-      <table id="table"><thead></thead><tbody></tbody></table>
-    </div>
+    <div class="table-wrap"><table id="table"><thead></thead><tbody></tbody></table></div>
 
-    <button id="save" type="button">Save Round</button>
-    <button id="back" type="button" hidden style="background:#2196f3">⬅ Back a Round</button>
-    <button id="clear" type="button" style="background:#555">⟲ Reset Game</button>
+    <button id="save">Save Round</button>
+    <button id="back" class="alt" hidden>⬅ Back a Round</button>
+    <button id="tiebreak" class="alt" hidden>Add Tiebreaker Round</button>
+    <button id="clear" class="gray">⟲ Reset Game</button>
 
     <p id="winner" hidden></p>
 
     <!-- BOX SCORE -->
     <div id="history" hidden>
       <h3>Box Score</h3>
-      <div class="table-wrap">
-        <table id="histTable"><thead></thead><tbody></tbody><tfoot></tfoot></table>
-      </div>
+      <div class="table-wrap"><table id="histTable"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
     </div>
   </section>
 </div>
 
 <script>
-/* ---------- helpers ---------- */
-const qs  = sel => document.querySelector(sel);
+/* helpers */
+const qs = sel => document.querySelector(sel);
 const qsa = sel => [...document.querySelectorAll(sel)];
 
-/* ---------- card values ---------- */
-const CARD_VALUES = {
-  0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,
+/* card points */
+const CARD_VALUES={0:0,1:1,2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,
   Reverse:20,Skip:20,"Hit 2":20,"Discard All":30,"Trade Hands":30,
-  Wild:50,"Wild All Hit":50,"Wild Hit Fire":50,"Wild Attack-Attack":50
-};
-const CARD_NAMES = Object.keys(CARD_VALUES);
-const makeSelect = () => {
-  const s=document.createElement('select'); s.className='card';
-  CARD_NAMES.forEach(c=>s.add(new Option(c,c))); return s;
-};
-const sumHand = sel => [...sel].reduce((t,s)=>t+CARD_VALUES[s.value],0);
+  Wild:50,"Wild All Hit":50,"Wild Hit Fire":50,"Wild Attack-Attack":50};
+const CARD_NAMES=Object.keys(CARD_VALUES);
+const makeSelect=()=>{const s=document.createElement('select');s.className='card';CARD_NAMES.forEach(c=>s.add(new Option(c,c)));return s};
+const sumHand=sel=>[...sel].reduce((t,s)=>t+CARD_VALUES[s.value],0);
 
-/* ---------- state ---------- */
+/* state */
 let players=0, rounds=0;
 let names=[], totals=[], roundScores=[];
 
-/* STEP 1 → STEP 2 */
-qs('#toNames').onclick = () => {
-  players = +qs('#players').value;
-  rounds  = +qs('#rounds').value;
+/* STEP 1 → 2 */
+qs('#toNames').onclick=()=>{
+  players=+qs('#players').value; rounds=+qs('#rounds').value;
   if(players<2||rounds<1){alert('Enter valid numbers');return;}
-
-  const wrap=qs('#nameInputs'); wrap.innerHTML='';
-  for(let i=0;i<players;i++){
-    wrap.insertAdjacentHTML('beforeend',`<input placeholder="Player ${i+1} name" class="pname">`);
-  }
+  const wrap=qs('#nameInputs');wrap.innerHTML='';
+  for(let i=0;i<players;i++)wrap.insertAdjacentHTML('beforeend',`<input placeholder="Player ${i+1} name" class="pname">`);
   qs('#setup').hidden=true; qs('#nameScreen').hidden=false;
 };
 
 /* STEP 2 → GAME */
-qs('#beginGame').onclick = () => {
-  names=qsa('.pname').map((i,k)=>i.value.trim()||`P${k+1}`);
+qs('#beginGame').onclick=()=>{
+  names=qsa('.pname').map((inp,i)=>inp.value.trim()||`P${i+1}`);
   if(names.some(n=>n==='')){alert('Fill every name');return;}
-
-  totals = Array(players).fill(0);
-  roundScores = [];                             // reset history
-  qs('#nameScreen').hidden=true; qs('#board').hidden=false;
-  qs('#winner').hidden=true; qs('#history').hidden=true;
-  qs('#back').hidden=true; qs('#save').hidden=false;
+  totals=Array(players).fill(0); roundScores=[];
+  ['#nameScreen','#winner','#history','#tiebreak','#back'].forEach(id=>qs(id).hidden=true);
+  qs('#board').hidden=false; qs('#save').hidden=false;
   buildBoard(); buildHistHeader(); updateTotalsFooter(); updateRoundLabel();
 };
 
-/* build entry table for current round */
+/* build entry table */
 function buildBoard(){
   qs('#table thead').innerHTML='<tr><th>Player</th><th>Cards / Hand</th></tr>';
   const tbody=qs('#table tbody'); tbody.innerHTML='';
-  names.forEach(n=>{
-    tbody.insertAdjacentHTML('beforeend',
-      `<tr><td>${n}</td><td class="hand"><div class="hand-inner"></div></td></tr>`);
-  });
+  names.forEach(n=>tbody.insertAdjacentHTML('beforeend',`<tr><td>${n}</td><td class="hand"><div class="hand-inner"></div></td></tr>`));
   qsa('.hand-inner').forEach(addHandUI);
 }
 
-/* add vertical card selectors */
-function addHandUI(container){
-  container.innerHTML=''; container.append(makeSelect());
-  const add=document.createElement('button');
-  add.textContent='+'; add.type='button'; add.className='add';
-  add.onclick = () => container.insertBefore(makeSelect(),add);
-  container.append(add);
+/* vertical selectors */
+function addHandUI(cell){
+  cell.innerHTML=''; cell.append(makeSelect());
+  const add=document.createElement('button');add.textContent='+';add.className='add';add.onclick=()=>cell.insertBefore(makeSelect(),add);cell.append(add);
 }
 
-/* ---------- BOX SCORE ---------- */
-function buildHistHeader(){
-  qs('#histTable thead').innerHTML =
-    '<tr><th>Round</th>'+names.map(n=>`<th>${n}</th>`).join('')+'</tr>';
-  qs('#histTable tbody').innerHTML='';
-  qs('#histTable tfoot').innerHTML='';
-}
-function addHistRow(num,scores){
-  qs('#histTable tbody').insertAdjacentHTML('beforeend',
-    `<tr><td>${num}</td>${scores.map(x=>`<td>${x}</td>`).join('')}</tr>`);
-}
-function updateTotalsFooter(){
-  qs('#histTable tfoot').innerHTML =
-    '<tr><th>Total</th>'+totals.map(t=>`<th>${t}</th>`).join('')+'</tr>';
-}
-function updateRoundLabel(){
-  qs('#roundNow').textContent = roundScores.length + 1;
-  qs('#roundMax').textContent = rounds;
-}
+/* box-score helpers */
+const buildHistHeader=()=>qs('#histTable thead').innerHTML='<tr><th>Round</th>'+names.map(n=>`<th>${n}</th>`).join('')+'</tr>';
+const addHistRow=(num,arr)=>qs('#histTable tbody').insertAdjacentHTML('beforeend','<tr><td>'+num+'</td>'+arr.map(x=>`<td>${x}</td>`).join('')+'</tr>');
+const updateTotalsFooter=()=>qs('#histTable tfoot').innerHTML='<tr><th>Total</th>'+totals.map(t=>`<th>${t}</th>`).join('')+'</tr>';
+const updateRoundLabel=()=>{qs('#roundNow').textContent=roundScores.length+1;qs('#roundMax').textContent=rounds;};
 
-/* ---------- SAVE ROUND ---------- */
-qs('#save').onclick = () => {
-  const roundNum = roundScores.length + 1;
-  const thisRound = qsa('#table tbody .hand').map((td,i)=>{
-    const score = sumHand(td.querySelectorAll('select.card'));
-    totals[i] += score; return score;
-  });
+/* SAVE */
+qs('#save').onclick=()=>{
+  const num=roundScores.length+1;
+  const scores=qsa('#table .hand').map((td,i)=>{const s=sumHand(td.querySelectorAll('select.card'));totals[i]+=s;return s;});
+  roundScores.push(scores); addHistRow(num,scores); updateTotalsFooter(); qs('#history').hidden=false; qs('#back').hidden=false;
 
-  roundScores.push(thisRound);
-  addHistRow(roundNum,thisRound);
-  updateTotalsFooter();
-  qs('#history').hidden=false; qs('#back').hidden=false;
+  if(num>=rounds){checkWinner();}else{buildBoard(); updateRoundLabel();}
+};
 
-  if(roundNum >= rounds){
-    declareWinner();
-    qs('#save').hidden=true;
+/* BACK */
+qs('#back').onclick=()=>{
+  if(!roundScores.length)return;
+  const last=roundScores.pop(); totals=totals.map((t,i)=>t-last[i]);
+  qs('#histTable tbody').lastElementChild.remove(); updateTotalsFooter();
+  ['#history','#back','#winner','#tiebreak'].forEach(id=>qs(id).hidden=!roundScores.length);
+  qs('#save').hidden=false; buildBoard(); updateRoundLabel();
+};
+
+/* WINNER / TIE logic */
+function checkWinner(){
+  const min=Math.min(...totals);
+  const winners=names.filter((_,i)=>totals[i]===min);
+  if(winners.length>1){
+    qs('#winner').textContent=`Tie between ${winners.join(', ')} with ${min} points`;
+    qs('#tiebreak').hidden=false;        // offer extra round
   }else{
-    buildBoard();             // new blank selectors for next round
-    updateRoundLabel();
+    qs('#winner').textContent=`Winner: ${winners[0]} with ${min} points`;
+    qs('#tiebreak').hidden=true;
+    qs('#save').hidden=true;
   }
-};
-
-/* ---------- BACK ONE ROUND ---------- */
-qs('#back').onclick = () => {
-  if(!roundScores.length) return;
-  const last = roundScores.pop();
-  totals = totals.map((t,i)=>t-last[i]);
-
-  // remove history row & update
-  qs('#histTable tbody').lastElementChild.remove();
-  updateTotalsFooter();
-  qs('#history').hidden = !roundScores.length;
-  qs('#back').hidden    = !roundScores.length;
-  qs('#winner').hidden  = true;
-  qs('#save').hidden    = false;
-
-  buildBoard();
-  updateRoundLabel();
-};
-
-/* ---------- WINNER ---------- */
-function declareWinner(){
-  const min = Math.min(...totals);
-  const winners = names.filter((_,i)=>totals[i]===min);
-  qs('#winner').textContent =
-    winners.length>1
-      ? `Tie! ${winners.join(', ')} win with ${min} points`
-      : `Winner: ${winners[0]} with ${min} points`;
-  qs('#winner').hidden = false;
+  qs('#winner').hidden=false;
 }
 
-/* ---------- RESET GAME ---------- */
-qs('#clear').onclick = () =>{
-  if(confirm('Reset the entire game?')){
-    qs('#board').hidden=true; qs('#setup').hidden=false;
-  }
+/* TIEBREAKER button */
+qs('#tiebreak').onclick=()=>{
+  rounds++; updateRoundLabel();           // extend game
+  qs('#winner').hidden=true; qs('#tiebreak').hidden=true;
+  buildBoard();                           // new empty selectors
+  qs('#save').hidden=false;
 };
+
+/* RESET */
+qs('#clear').onclick=()=>confirm('Reset the entire game?')&&(qs('#board').hidden=true,qs('#setup').hidden=false);
 </script>
 </body>
 </html>
